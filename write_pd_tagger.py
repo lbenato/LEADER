@@ -13,8 +13,12 @@ folder = '/nfs/dust/cms/group/cms-llp/v0_SUSY_calo_MINIAOD_2018/'
 #sgn = ['VBFH_M15_ctau100','VBFH_M20_ctau100','VBFH_M25_ctau100','VBFH_M15_ctau500','VBFH_M20_ctau500','VBFH_M25_ctau500','VBFH_M15_ctau1000','VBFH_M20_ctau1000','VBFH_M25_ctau1000','VBFH_M15_ctau2000','VBFH_M20_ctau2000','VBFH_M25_ctau2000','VBFH_M15_ctau5000','VBFH_M20_ctau5000','VBFH_M25_ctau5000','VBFH_M15_ctau10000','VBFH_M20_ctau10000','VBFH_M25_ctau10000']
 bkg = ['ZJetsToNuNu','WJetsToLNu','QCD','VV','TTbar']
 sgn = ['SUSY_mh400_pl1000','SUSY_mh300_pl1000','SUSY_mh250_pl1000','SUSY_mh200_pl1000','SUSY_mh175_pl1000','SUSY_mh150_pl1000','SUSY_mh127_pl1000']
-bkg = ['ZJetsToNuNu']
+#bkg = ['WJetsToLNu']
+bkg = ['QCD','VV','TTbar']
+bkg = []
 sgn = []
+#sgn = ['ggH_MH1000_MS400_ctau500','ggH_MH1000_MS400_ctau1000','ggH_MH1000_MS400_ctau2000','ggH_MH1000_MS400_ctau5000','ggH_MH1000_MS400_ctau10000',
+#'ggH_MH1000_MS150_ctau500','ggH_MH1000_MS150_ctau1000','ggH_MH1000_MS150_ctau2000','ggH_MH1000_MS150_ctau5000','ggH_MH1000_MS150_ctau10000']
 from samplesMINIAOD2018 import *
 
 #done: 'DYJetsToLL','WJetsToLNu','QCD','VV','TTbar','ST'
@@ -24,12 +28,13 @@ from samplesMINIAOD2018 import *
 # define your variables here
 var_list = ['EventNumber','RunNumber','LumiNumber','EventWeight','isMC',#not to be trained on!
             'isVBF','HT','MEt.pt','MEt.phi','MEt.sign','MinJetMetDPhi',
-            'nCHSJets',
+            nCHSJets',
+            #'nJets',
             'nElectrons','nMuons','nPhotons','nTaus','nPFCandidates','nPFCandidatesTrack']
 #jets variables
-nj = 5
+nj = 6
 jtype = ['Jets']
-jvar = ['pt','eta','phi','mass','nTrackConstituents','nConstituents','nSelectedTracks','nHadEFrac','cHadEFrac','muEFrac','eleEFrac','photonEFrac','eleMulti','muMulti','photonMulti','cHadMulti','nHadMulti','alphaMax','pfXWP100','pfXWP1000','ecalE','hcalE']
+jvar = ['pt','eta','phi','mass','nTrackConstituents','nConstituents','nSelectedTracks','nHadEFrac','cHadEFrac','muEFrac','eleEFrac','photonEFrac','eleMulti','muMulti','photonMulti','cHadMulti','nHadMulti','alphaMax','pfXWP100','pfXWP1000','ecalE','hcalE','sigIP2DMedian','theta2DMedian','POCA_theta2DMedian','nPixelHitsMedian','nHitsMedian','nVertexTracks','CSV','nSV','dRSVJet','flightDist2d','flightDist2dError','flightDist3d','flightDist3dError','nTracksSV','SV_mass']
 jvar+=['isGenMatched']
 jet_list = []
 
@@ -61,6 +66,9 @@ def write_h5(folder,output_folder,file_list,test_split,tree_name="",counter_hist
             print("  n events gen.: ", nevents_gen)
             oldTree = oldFile.Get(tree_name)
             nevents_tot = oldTree.GetEntries()#?#-1
+            tree_weight = oldTree.GetWeight()
+            print("   Tree weight:   ",tree_weight)
+            #exit()
             oldTree.SetBranchAddress("MEt", AddressOf(MEt, "pt") )
             #oldTree.SetBranchAddress("CHSJets", AddressOf(CHSJets, "pt") );
 
@@ -97,7 +105,16 @@ def write_h5(folder,output_folder,file_list,test_split,tree_name="",counter_hist
             # loop over variables
             for nr,variable in enumerate(var_list):
                 if "[" in variable:
-                    default = -9. if ("eta" in variable or "phi" in variable) else -1.
+                    if("eta" in variable or "phi" in variable):
+                        default = -9. 
+                    elif("SV_mass" in variable or "flightDist2d" in variable or "flightDist3d" in variable or "dRSVJet" in variable or "alphaMax" in variable or "theta2DMedian" in variable):
+                        default = -100. 
+                    elif("CSV" in variable):
+                        default = -99. 
+                    elif("sigIP2DMedian" in variable):
+                        default = -99999.
+                    else:
+                        default= -1.
                     b = rnp.root2array(folder+ss+'.root', selection = sel_cut, object_selection = obj_sel_cut, treename=tree_name, branches=(variable,default), start=0, stop=nevents_tot)#we need to run through all the tree!
                     #safe check for vectors of structures: apply hstack
                     b = np.hstack(b)
@@ -116,7 +133,8 @@ def write_h5(folder,output_folder,file_list,test_split,tree_name="",counter_hist
             #add is_signal flag
             df["is_signal"] = np.ones(nevents) if "n3n2" in ss else np.zeros(nevents)
             df["c_nEvents"] = np.ones(nevents) * nevents_gen
-
+            df["EventWeight"] = df["EventWeight"]*tree_weight
+            df.rename(columns={"nJets" : "nCHSJets"},inplace=True)
             if verbose:
                 print(df)
 
@@ -151,8 +169,11 @@ def read_h5(folder,file_names):
 
 print("write")
 print("VERY IMPORTANT! selection in rnp.root2array performs an OR of the different conditions!!!!")
-write_h5(folder,"dataframes/v0_SUSY_calo_MINIAOD_2018/",sgn+bkg,test_split=0.2,tree_name="ntuple/tree",counter_hist="counter/c_nEvents",sel_cut ="MEt.sign>20")
-#write_h5(folder,"dataframes/v0_calo_AOD/",sgn+bkg,test_split=0.2,tree_name="ntuple/tree",counter_hist="counter/c_nEvents",sel_cut ="HT>200",obj_sel_cut="")
+write_h5(folder,"dataframes/v0_SUSY_calo_MINIAOD_2018/",sgn+bkg,test_split=0.2,tree_name="ntuple/tree",counter_hist="counter/c_nEvents",sel_cut ="HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_v")
+##For heavy higgs: 100% test
+#write_h5(folder,"dataframes/v0_SUSY_calo_MINIAOD_2018/",sgn+bkg,test_split=1.,tree_name="ntuple/tree",counter_hist="counter/c_nEvents",sel_cut ="HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_v")
+
+###write_h5(folder,"dataframes/v0_calo_AOD/",sgn+bkg,test_split=0.2,tree_name="ntuple/tree",counter_hist="counter/c_nEvents",sel_cut ="HT>200",obj_sel_cut="")
 
 #print "read"
 #read_h5(folder,file_names)
